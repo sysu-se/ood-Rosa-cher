@@ -1,150 +1,146 @@
-/**
- * Sudoku 领域对象：负责数独盘面的核心逻辑
- * 职责：持有盘面数据、处理输入、校验、序列化/反序列化、克隆
- */
+// src/domain/Sudoku.js
+import { BOX_SIZE, SUDOKU_SIZE } from '@sudoku/constants';
+
 export class Sudoku {
-  constructor(initialGrid) {
-    // 深拷贝初始网格，避免外部引用污染
-    this.grid = this.#deepCloneGrid(initialGrid);
-    // 记录初始盘面（用于判断哪些格子是预设的）
-    this.initialGrid = this.#deepCloneGrid(initialGrid);
+  constructor(grid) {
+    // 深拷贝初始盘面
+    this.grid = grid.map(row => [...row]);
+    this.initialGrid = grid.map(row => [...row]); // 保存初始给定数字（0表示未填）
   }
 
-  /**
-   * 深拷贝 9x9 网格
-   * @param {number[][]} grid 原始网格
-   * @returns {number[][]} 深拷贝后的网格
-   */
-  #deepCloneGrid(grid) {
-    return grid.map(row => [...row]);
-  }
-
-  /**
-   * 获取当前盘面（返回拷贝，避免外部直接修改）
-   * @returns {number[][]}
-   */
   getGrid() {
-    return this.#deepCloneGrid(this.grid);
+    return this.grid.map(row => [...row]);
   }
 
-  /**
-   * 用户输入数字
-   * @param {Object} move - { row: number, col: number, value: number }
-   */
-  guess(move) {
-    const { row, col, value } = move;
-    // 不允许修改初始预设的格子
-    if (this.initialGrid[row][col] !== 0) return;
-    // 合法值：0（清空）-9，超出范围不处理
-    if (value < 0 || value > 9) return;
+  // 获取指定位置的值
+  getCell(row, col) {
+    return this.grid[row][col];
+  }
+
+  // 尝试填入数字，返回是否合法（不违反规则）
+  guess(row, col, value) {
+    // 如果该位置是初始给定的数字（非0），不可修改
+    if (this.initialGrid[row][col] !== 0) return false;
+    // 检查值是否合法（1-9）
+    if (value < 1 || value > 9) return false;
+    // 检查行、列、宫是否冲突
+    if (!this.isValidMove(row, col, value)) return false;
     this.grid[row][col] = value;
+    return true;
   }
 
-  /**
-   * 校验数独合法性
-   * @returns {Array<{row: number, col: number}>} 非法格子列表
-   */
-  validate() {
-    const invalidCells = [];
+  // 检查移动是否合法（不产生冲突）
+  isValidMove(row, col, value) {
+    // 行
+    for (let c = 0; c < SUDOKU_SIZE; c++) {
+      if (c !== col && this.grid[row][c] === value) return false;
+    }
+    // 列
+    for (let r = 0; r < SUDOKU_SIZE; r++) {
+      if (r !== row && this.grid[r][col] === value) return false;
+    }
+    // 宫
+    const boxRow = Math.floor(row / BOX_SIZE) * BOX_SIZE;
+    const boxCol = Math.floor(col / BOX_SIZE) * BOX_SIZE;
+    for (let r = 0; r < BOX_SIZE; r++) {
+      for (let c = 0; c < BOX_SIZE; c++) {
+        const rr = boxRow + r;
+        const cc = boxCol + c;
+        if (rr !== row && cc !== col && this.grid[rr][cc] === value) return false;
+      }
+    }
+    return true;
+  }
 
-    // 检查每行、每列、每个 3x3 宫格
-    for (let row = 0; row < 9; row++) {
-      for (let col = 0; col < 9; col++) {
-        const value = this.grid[row][col];
-        if (value === 0) continue; // 空值不校验
+  // 获取某个位置的所有候选数字
+  getCandidates(row, col) {
+    if (this.grid[row][col] !== 0) return [];
+    const candidates = [];
+    for (let v = 1; v <= 9; v++) {
+      if (this.isValidMove(row, col, v)) candidates.push(v);
+    }
+    return candidates;
+  }
 
-        // 行重复检查
-        const rowDuplicate = this.grid[row].some((v, c) => c !== col && v === value);
-        // 列重复检查
-        const colDuplicate = this.grid.some((r, rIdx) => rIdx !== row && r[col] === value);
-        // 3x3 宫格重复检查
-        const boxRow = Math.floor(row / 3) * 3;
-        const boxCol = Math.floor(col / 3) * 3;
-        let boxDuplicate = false;
-        for (let r = boxRow; r < boxRow + 3; r++) {
-          for (let c = boxCol; c < boxCol + 3; c++) {
-            if ((r !== row || c !== col) && this.grid[r][c] === value) {
-              boxDuplicate = true;
-              break;
-            }
+  // 获取下一个最确定的提示（唯一候选数的格子）
+  getNextHint() {
+    let bestRow = -1, bestCol = -1;
+    let minCandidates = 10;
+    for (let r = 0; r < SUDOKU_SIZE; r++) {
+      for (let c = 0; c < SUDOKU_SIZE; c++) {
+        if (this.grid[r][c] === 0) {
+          const cands = this.getCandidates(r, c);
+          if (cands.length === 1) {
+            return { row: r, col: c, value: cands[0], reason: '唯一候选数' };
           }
-        }
-
-        if (rowDuplicate || colDuplicate || boxDuplicate) {
-          invalidCells.push({ row, col });
+          if (cands.length < minCandidates) {
+            minCandidates = cands.length;
+            bestRow = r;
+            bestCol = c;
+          }
         }
       }
     }
-
-    return invalidCells;
+    if (bestRow !== -1) {
+      return { row: bestRow, col: bestCol, candidates: this.getCandidates(bestRow, bestCol), reason: '候选数最少' };
+    }
+    return null;
   }
 
-  /**
-   * 判断数独是否完成（填满且合法）
-   * @returns {boolean}
-   */
+  // 检查盘面是否完整且无冲突
   isComplete() {
-    // 检查是否有空格
-    const hasEmptyCells = this.grid.some(row => row.includes(0));
-    if (hasEmptyCells) return false;
-    // 检查是否有非法格子
-    return this.validate().length === 0;
+    for (let r = 0; r < SUDOKU_SIZE; r++) {
+      for (let c = 0; c < SUDOKU_SIZE; c++) {
+        if (this.grid[r][c] === 0) return false;
+        const val = this.grid[r][c];
+        // 临时置0再检查合法性
+        this.grid[r][c] = 0;
+        const valid = this.isValidMove(r, c, val);
+        this.grid[r][c] = val;
+        if (!valid) return false;
+      }
+    }
+    return true;
   }
 
-  /**
-   * 克隆 Sudoku 对象（用于历史快照）
-   * @returns {Sudoku}
-   */
+  // 检查当前盘面是否有冲突（用于UI高亮）
+  getConflicts() {
+    const conflicts = [];
+    for (let r = 0; r < SUDOKU_SIZE; r++) {
+      for (let c = 0; c < SUDOKU_SIZE; c++) {
+        const val = this.grid[r][c];
+        if (val !== 0 && !this.isValidMove(r, c, val)) {
+          conflicts.push(`${r},${c}`);
+        }
+      }
+    }
+    return conflicts;
+  }
+
   clone() {
-    return new Sudoku(this.grid);
+    return new Sudoku(this.getGrid());
   }
 
-  /**
-   * 序列化到 JSON
-   * @returns {string}
-   */
   toJSON() {
-    return JSON.stringify({
-      grid: this.grid,
-      initialGrid: this.initialGrid
-    });
+    return {
+      grid: this.getGrid(),
+      initialGrid: this.initialGrid.map(row => [...row])
+    };
   }
 
-  /**
-   * 外表化：生成易读的字符串（用于调试）
-   * @returns {string}
-   */
   toString() {
-    return this.grid.map(row => row.join(' ')).join('\n');
+    let out = '';
+    for (let r = 0; r < SUDOKU_SIZE; r++) {
+      for (let c = 0; c < SUDOKU_SIZE; c++) {
+        out += (this.grid[r][c] || '.') + (c === 8 ? '\n' : ' ');
+      }
+    }
+    return out;
   }
 
-  /**
-   * 从 JSON 反序列化创建 Sudoku
-   * @param {string} json - JSON 字符串
-   * @returns {Sudoku}
-   */
   static fromJSON(json) {
-    const data = JSON.parse(json);
-    const sudoku = new Sudoku(data.grid);
-    sudoku.initialGrid = data.initialGrid;
-    return sudoku;
+    const s = new Sudoku(json.grid);
+    s.initialGrid = json.initialGrid.map(row => [...row]);
+    return s;
   }
-}
-
-/**
- * 符合作业要求的工厂函数
- * @param {number[][]} input - 9x9 网格
- * @returns {Sudoku}
- */
-export function createSudoku(input) {
-  return new Sudoku(input);
-}
-
-/**
- * 从 JSON 创建 Sudoku（作业要求的接口）
- * @param {string} json
- * @returns {Sudoku}
- */
-export function createSudokuFromJSON(json) {
-  return Sudoku.fromJSON(json);
 }
