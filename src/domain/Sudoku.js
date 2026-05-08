@@ -18,7 +18,8 @@ export class Sudoku {
   }
 
   // 尝试填入数字，返回是否合法（不违反规则）
-  guess(row, col, value) {
+  guess(move) {
+    const { row, col, value } = move;
     // 如果该位置是初始给定的数字（非0），不可修改
     if (this.initialGrid[row][col] !== 0) return false;
     // 检查值是否合法（1-9）

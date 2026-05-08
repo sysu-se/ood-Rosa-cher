@@ -32,10 +32,11 @@ export class Game {
     return this.sudoku.getGrid();
   }
 
-  guess(row, col, value) {
+  guess(move) {
+    const { row, col, value } = move;
     if (this.exploreMode) {
       // 探索模式下直接修改 sudoku，不记录主历史
-      const success = this.sudoku.guess(row, col, value);
+      const success = this.sudoku.guess({ row, col, value });
       if (success) {
         // 检查是否冲突（探索失败）
         if (!this.isExplorationValid()) {
@@ -50,7 +51,7 @@ export class Game {
       if (!this.sudoku.isValidMove(row, col, value)) {
         return { success: false, conflict: true };
       }
-      const success = this.sudoku.guess(row, col, value);
+      const success = this.sudoku.guess({ row, col, value });
       if (success) {
         this.pushState();
       }

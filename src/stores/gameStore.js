@@ -44,9 +44,9 @@ export function getCurrentSencode() {
 }
 
 // 用户猜测
-export function guess(row, col, value) {
+export function guess({ row: y, col: x, value }) {
   if (!currentGame) return false;
-  const result = currentGame.guess(row, col, value);
+  const result = currentGame.guess({ row: y, col: x, value });
   updateGridStore();
   return result;
 }
