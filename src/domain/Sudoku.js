@@ -1,5 +1,5 @@
 // src/domain/Sudoku.js
-import { BOX_SIZE, SUDOKU_SIZE } from '@sudoku/constants';
+import { BOX_SIZE, SUDOKU_SIZE } from '../node_modules/@sudoku/constants.js';
 
 export class Sudoku {
   constructor(grid) {
